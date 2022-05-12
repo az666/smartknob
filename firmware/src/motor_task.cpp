@@ -53,7 +53,7 @@ void MotorTask::run() {
     // float zero_electric_offset = -0.8; // handheld 2
     // float zero_electric_offset = 2.93; //0.15; // 17mm test
     // float zero_electric_offset = 0.66; // 15mm handheld
-    float zero_electric_offset = 7.34;
+    float zero_electric_offset = 7.34;          //零点偏置
     Direction foc_direction = Direction::CW;
     motor.pole_pairs = 7;
 
@@ -72,6 +72,7 @@ void MotorTask::run() {
 
     motor.linkDriver(&driver);
 
+    //设置为转矩控制
     motor.controller = MotionControlType::torque;
     motor.voltage_limit = 5;
     motor.velocity_limit = 10000;
@@ -93,6 +94,7 @@ void MotorTask::run() {
     encoder.update();
     delay(10);
 
+    //跳过传感器对齐 传感器偏移zero_electric_offset和传感器方向sensor_direction以避免对齐过程
     motor.initFOC(zero_electric_offset, foc_direction);
 
     bool calibrate = false;
@@ -106,7 +108,9 @@ void MotorTask::run() {
         }
         delay(10);
     }
+    //是否开启校准
     if (calibrate) {
+        //设置为角度开环控制
         motor.controller = MotionControlType::angle_openloop;
         motor.pole_pairs = 1;
         motor.initFOC(0, Direction::CW);
@@ -145,6 +149,7 @@ void MotorTask::run() {
 
         // TODO: check for no motor movement!
 
+        //传感器旋转，确定电机方向
         Serial.print("Sensor measures positive for positive motor rotation: ");
         if (end_sensor > start_sensor) {
             Serial.println("YES, Direction=CW");
@@ -200,12 +205,14 @@ void MotorTask::run() {
 
         int measured_pole_pairs = (int)round(electrical_per_mechanical);
         Serial.printf("Pole pairs set to %d\n", measured_pole_pairs);
+        //上面应该是自动计算极对数用的，一般已知的话，是可以直接输入的
 
         delay(1000);
 
 
 
         // Measure mechanical angle at every electrical zero for several revolutions
+        // 在每一个电零点测量几转的机械角度
         motor.voltage_limit = 5;
         motor.move(a);
         float offset_x = 0;
@@ -257,8 +264,8 @@ void MotorTask::run() {
 
         float avg_offset_angle = atan2f(offset_y, offset_x);
 
-        // Apply settings
-        motor.pole_pairs = measured_pole_pairs;
+        // 校准完成   接受设定    Apply settings
+        motor.pole_pairs = measured_pole_pairs;   //极对数，也可以直接输入
         motor.zero_electric_angle = avg_offset_angle + _3PI_2;
         motor.voltage_limit = 5;
         motor.controller = MotionControlType::torque;
@@ -279,11 +286,13 @@ void MotorTask::run() {
 
     command.add('M', &doMotor, "foo");
     // command.add('D', &doDetents, "Detents");
-    motor.monitor_downsample = 0; // disable monitor at first - optional
+    motor.monitor_downsample = 0; //首先禁用监视器
 
     // disableCore0WDT();
-
+    // 当前棘爪中心
     float current_detent_center = motor.shaft_angle;
+
+    //先设置一个默认值，等消息队列发送状态过来
     KnobConfig config = {
         .num_positions = 2,
         .position = 0,
@@ -303,6 +312,7 @@ void MotorTask::run() {
         Command command;
         if (xQueueReceive(queue_, &command, 0) == pdTRUE) {
             switch (command.command_type) {
+                //初始化
                 case CommandType::CONFIG: {
                     config = command.data.config;
                     Serial.println("Got new config");
@@ -324,6 +334,7 @@ void MotorTask::run() {
                     const float derivative_position_width_lower = radians(3);
                     const float derivative_position_width_upper = radians(8);
                     const float raw = derivative_lower_strength + (derivative_upper_strength - derivative_lower_strength)/(derivative_position_width_upper - derivative_position_width_lower)*(config.position_width_radians - derivative_position_width_lower);
+                    //CLAMP可以将随机变化的值限制在一个给定的区间[min,max]内
                     motor.PID_velocity.D = CLAMP(
                         raw,
                         min(derivative_lower_strength, derivative_upper_strength),
@@ -331,8 +342,9 @@ void MotorTask::run() {
                     );
                     break;
                 }
+                //触觉
                 case CommandType::HAPTIC: {
-                    float strength = command.data.haptic.press ? 5 : 1.5;
+                    float strength = command.data.haptic.press ? 5 : 1.5; //设置强度 这里应该是模拟触觉反馈的
                     motor.move(strength);
                     for (uint8_t i = 0; i < 3; i++) {
                         motor.loopFOC();
@@ -423,6 +435,7 @@ void MotorTask::run() {
     }
 }
 
+//这个接口存在消息队列的发送
 void MotorTask::setConfig(const KnobConfig& config) {
     Command command = {
         .command_type = CommandType::CONFIG,
@@ -433,7 +446,7 @@ void MotorTask::setConfig(const KnobConfig& config) {
     xQueueSend(queue_, &command, portMAX_DELAY);
 }
 
-
+//这个接口存在消息队列的发送
 void MotorTask::playHaptic(bool press) {
     Command command = {
         .command_type = CommandType::HAPTIC,

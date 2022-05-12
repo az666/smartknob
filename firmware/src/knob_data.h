@@ -4,11 +4,11 @@
 
 struct KnobConfig {
     int32_t num_positions;
-    int32_t position;
-    float position_width_radians;
-    float detent_strength_unit;
-    float endstop_strength_unit;
-    float snap_point;
+    int32_t position;             //位置
+    float position_width_radians; //位置宽度弧度
+    float detent_strength_unit;   //制动强度单位
+    float endstop_strength_unit;  //endstop强度单位
+    float snap_point;             //对其点 
     char descriptor[50];
 };
 

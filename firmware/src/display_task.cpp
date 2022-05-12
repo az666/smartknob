@@ -1,4 +1,4 @@
-#if SK_DISPLAY
+//#if SK_DISPLAY 
 #include "display_task.h"
 #include "semaphore_guard.h"
 
