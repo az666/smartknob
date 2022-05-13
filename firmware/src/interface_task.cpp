@@ -32,31 +32,32 @@ Adafruit_VEML7700 veml = Adafruit_VEML7700();
 #endif
 
 static KnobConfig configs[] = {
-    // int32_t num_positions;
-    // int32_t position;
-    // float position_width_radians;
-    // float detent_strength_unit;
-    // float endstop_strength_unit;
-    // float snap_point;
-    // char descriptor[50];
-
+    /*
+    int32_t num_positions;        //可以运动的个数
+    int32_t position;             //位置
+    float position_width_radians; //位置宽度弧度 或者是每一步的度数
+    float detent_strength_unit;   //制动强度
+    float endstop_strength_unit;  //endstop强度
+    float snap_point;             //对其点 
+    char descriptor[50];          //描述符
+    */
     {
         0,
         0,
-        10 * PI / 180,
+        10 * PI / 180,       
         0,
         1,
         1.1,
-        "Unbounded\nNo detents",
+        "Unbounded\nNo detents",  //无限制  不制动
     },
     {
         11,
         0,
-        10 * PI / 180,
+        10 * PI / 180,           //10度
         0,
         1,
         1.1,
-        "Bounded 0-10\nNo detents",
+        "Bounded 0-10\nNo detents", //限制0-10 不制动
     },
     {
         73,
@@ -65,25 +66,25 @@ static KnobConfig configs[] = {
         0,
         1,
         1.1,
-        "Multi-rev\nNo detents",
+        "Multi-rev\nNo detents",  //限制0-72 不制动
     },
     {
-        2,
+        2,                       //可以运动的个数
         0,
-        60 * PI / 180,
-        1,
+        60 * PI / 180,           //每一步60度
+        1,                       //制动强度为1
         1,
         0.55, // Note the snap point is slightly past the midpoint (0.5); compare to normal detents which use a snap point *past* the next value (i.e. > 1)
-        "On/off\nStrong detent",
+        "On/off\nStrong detent", //模拟开关  强制动
     },
     {
-        1,
+        1,                       //因为总是到中心 所以应该是只有一个
         0,
         60 * PI / 180,
         0.01,
         0.6,
         1.1,
-        "Return-to-center",
+        "Return-to-center",      //一个节点在中心 产生阻尼
     },
     {
         256,
@@ -92,7 +93,7 @@ static KnobConfig configs[] = {
         0,
         1,
         1.1,
-        "Fine values\nNo detents",
+        "Fine values\nNo detents", //任意运动的控制  无阻尼
     },
     {
         256,
@@ -101,7 +102,7 @@ static KnobConfig configs[] = {
         1,
         1,
         1.1,
-        "Fine values\nWith detents",
+        "Fine values\nWith detents", //任意运动的控制  有阻尼 类似于机械旋钮
     },
     {
         32,
@@ -110,7 +111,7 @@ static KnobConfig configs[] = {
         2,
         1,
         1.1,
-        "Coarse values\nStrong detents",
+        "Coarse values\nStrong detents", //粗糙的棘轮 强阻尼
     },
     {
         32,
@@ -119,7 +120,7 @@ static KnobConfig configs[] = {
         0.2,
         1,
         1.1,
-        "Coarse values\nWeak detents",
+        "Coarse values\nWeak detents", //细腻的棘轮 弱阻尼
     },
 };
 

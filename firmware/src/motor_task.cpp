@@ -6,13 +6,20 @@
 #include "tlv_sensor.h"
 #include "util.h"
 
+//死区制动百分率
 static const float DEAD_ZONE_DETENT_PERCENT = 0.2;
+//死区RAD?  
 static const float DEAD_ZONE_RAD = 1 * _PI / 180;
 
+//怠速速度ewma alpha
 static const float IDLE_VELOCITY_EWMA_ALPHA = 0.001;
+//怠速速度每秒钟弧度
 static const float IDLE_VELOCITY_RAD_PER_SEC = 0.05;
+//怠速修正延迟millis
 static const uint32_t IDLE_CORRECTION_DELAY_MILLIS = 500;
+//怠速校正最大角度rad
 static const float IDLE_CORRECTION_MAX_ANGLE_RAD = 5 * PI / 180;
+//怠速修正率
 static const float IDLE_CORRECTION_RATE_ALPHA = 0.0005;
 
 
@@ -54,10 +61,10 @@ void MotorTask::run() {
     // float zero_electric_offset = 2.93; //0.15; // 17mm test
     // float zero_electric_offset = 0.66; // 15mm handheld
     float zero_electric_offset = 7.34;          //零点偏置
-    Direction foc_direction = Direction::CW;
-    motor.pole_pairs = 7;
+    Direction foc_direction = Direction::CW;    //传感器方向 （可设置正反）
+    motor.pole_pairs = 7;                       //电机的极对数
 
-    driver.voltage_power_supply = 5;
+    driver.voltage_power_supply = 5;            //设置驱动器电压
     driver.init();
 
     #if SENSOR_TLV
@@ -73,13 +80,13 @@ void MotorTask::run() {
     motor.linkDriver(&driver);
 
     //设置为转矩控制
-    motor.controller = MotionControlType::torque;
-    motor.voltage_limit = 5;
-    motor.velocity_limit = 10000;
+    motor.controller = MotionControlType::torque; //转矩控制
+    motor.voltage_limit = 5;                   //设置电压限制
+    motor.velocity_limit = 10000;              //速度限制
     motor.linkSensor(&encoder);
 
-    // Not actually using the velocity loop; but I'm using those PID variables
-    // because SimpleFOC studio supports updating them easily over serial for tuning.
+    // Not actually using the velocity loop; but I'm using those PID variables  没有实际使用速度环;但我用的是PID变量
+    // because SimpleFOC studio supports updating them easily over serial for tuning. 因为SimpleFOC studio支持通过串行更新它们以进行调优。
     motor.PID_velocity.P = 4;
     motor.PID_velocity.I = 0;
     motor.PID_velocity.D = 0.04;
@@ -268,7 +275,7 @@ void MotorTask::run() {
         motor.pole_pairs = measured_pole_pairs;   //极对数，也可以直接输入
         motor.zero_electric_angle = avg_offset_angle + _3PI_2;
         motor.voltage_limit = 5;
-        motor.controller = MotionControlType::torque;
+        motor.controller = MotionControlType::torque;      //设置为转矩控制
 
         Serial.print("\n\nRESULTS:\n  zero electric angle: ");
         Serial.println(motor.zero_electric_angle);
@@ -320,9 +327,11 @@ void MotorTask::run() {
                     #if SK_INVERT_ROTATION
                         current_detent_center = -motor.shaft_angle;
                     #endif
-
+                    // 基于制动宽度更新转矩控制器的导数因子。
                     // Update derivative factor of torque controller based on detent width.
+                    // 如果D因素是大的粗制动，电机最终产生噪音，因为P&D因素放大噪声从传感器。
                     // If the D factor is large on coarse detents, the motor ends up making noise because the P&D factors amplify the noise from the sensor.
+                    // 这是一个分段线性函数，因此细的止动(小宽度)得到一个较高的D因子，粗的止动得到一个较小的D因子。
                     // This is a piecewise linear function so that fine detents (small width) get a higher D factor and coarse detents get a small D factor.
                     // Fine detents need a nonzero D factor to artificially create "clicks" each time a new value is reached (the P factor is small
                     // for fine detents due to the smaller angular errors, and the existing P factor doesn't work well for very small angle changes (easy to
@@ -371,6 +380,7 @@ void MotorTask::run() {
             }
         }
 
+        // 如果我们没有移动，并且我们接近中心(但不是完全在那里)，慢慢调整中心点以匹配当前位置
         // If we are not moving and we're close to the center (but not exactly there), slowly adjust the centerpoint to match the current position
         if (last_idle_start > 0 && millis() - last_idle_start > IDLE_CORRECTION_DELAY_MILLIS && fabsf(motor.shaft_angle - current_detent_center) < IDLE_CORRECTION_MAX_ANGLE_RAD) {
             current_detent_center = motor.shaft_angle * IDLE_CORRECTION_RATE_ALPHA + current_detent_center * (1 - IDLE_CORRECTION_RATE_ALPHA);
@@ -382,7 +392,8 @@ void MotorTask::run() {
             //     Serial.println(motor.shaft_angle);
             // }
         }
-
+        
+        //到控制中心的角度
         float angle_to_detent_center = motor.shaft_angle - current_detent_center;
         #if SK_INVERT_ROTATION
             angle_to_detent_center = -motor.shaft_angle - current_detent_center;
@@ -397,18 +408,21 @@ void MotorTask::run() {
             config.position++;
         }
 
+        //CLAMP可以将随机变化的值限制在一个给定的区间[min,max]内
         float dead_zone_adjustment = CLAMP(
             angle_to_detent_center,
             fmaxf(-config.position_width_radians*DEAD_ZONE_DETENT_PERCENT, -DEAD_ZONE_RAD),
             fminf(config.position_width_radians*DEAD_ZONE_DETENT_PERCENT, DEAD_ZONE_RAD));
 
+        //出界
         bool out_of_bounds = config.num_positions > 0 && ((angle_to_detent_center > 0 && config.position == 0) || (angle_to_detent_center < 0 && config.position == config.num_positions - 1));
         motor.PID_velocity.limit = 10; //out_of_bounds ? 10 : 3;
         motor.PID_velocity.P = out_of_bounds ? config.endstop_strength_unit * 4 : config.detent_strength_unit * 4;
 
 
-
+        //  //处理float类型的取绝对值
         if (fabsf(motor.shaft_velocity) > 60) {
+            //如果速度太高 则不增加扭矩
             // Don't apply torque if velocity is too high (helps avoid positive feedback loop/runaway)
             motor.move(0);
         } else {
@@ -419,6 +433,7 @@ void MotorTask::run() {
             motor.move(torque);
         }
 
+        //每10ms 发送一次当前位置 给显示屏处理UI显示
         if (millis() - last_publish > 10) {
             publish({
                 .current_position = config.position,
